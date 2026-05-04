@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+"""HRNet pose head. ``HRNET_NN_REV`` bumps when training hotfixes land (verify after pip install)."""
+
 from typing import Any
 
 import torch
+
+HRNET_NN_REV = 2  # >=2: _build_targets(..., dtype) fix; stale Colab installs often stay on rev 0/1
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -89,12 +93,13 @@ class HRNetPoseModel(nn.Module):
         out_h: int,
         out_w: int,
         device: torch.device,
-        dtype: torch.dtype,
+        dtype: torch.dtype | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         b = batch["img"].shape[0]
-        hm_t = torch.zeros((b, self.nc, out_h, out_w), device=device, dtype=dtype)
-        off_t = torch.zeros((b, 2, out_h, out_w), device=device, dtype=dtype)
-        mask = torch.zeros((b, 1, out_h, out_w), device=device, dtype=dtype)
+        dt = dtype if dtype is not None else batch["img"].dtype
+        hm_t = torch.zeros((b, self.nc, out_h, out_w), device=device, dtype=dt)
+        off_t = torch.zeros((b, 2, out_h, out_w), device=device, dtype=dt)
+        mask = torch.zeros((b, 1, out_h, out_w), device=device, dtype=dt)
 
         if batch["bboxes"].numel() == 0:
             return hm_t, off_t, mask

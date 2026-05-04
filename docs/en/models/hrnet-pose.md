@@ -84,6 +84,28 @@ yolo train model=ultralytics/cfg/models/v8/hrnet_pose.yaml data=/absolute/path/t
 - each point is returned as a keypoint in `Results.keypoints`
 - small boxes are also attached to `Results.boxes` for easy visualization
 
+## Colab: avoid a stale `ultralytics` install
+
+Colab often ships Ultralytics under `/usr/local/.../dist-packages/`. If you still see **`NameError: hm_p`** in `hrnet/nn.py`, you are **not** running your fork’s latest code.
+
+**1) Reinstall from your fork (no cache), restart runtime:**
+
+```bash
+pip uninstall -y ultralytics
+pip install --no-cache-dir "git+https://github.com/m7mdGNo/ultralytics.git"
+```
+
+**2) Verify the HRNet fix is present:**
+
+```python
+from ultralytics.models.hrnet import nn as hrnet_nn
+
+assert getattr(hrnet_nn, "HRNET_NN_REV", 0) >= 2, "Old ultralytics; reinstall from GitHub"
+print("HRNET_NN_REV", hrnet_nn.HRNET_NN_REV)
+```
+
+If the assertion fails, the notebook is still using an old wheel—repeat uninstall/install or pin a **commit SHA** in the `git+https://...` URL.
+
 ## Notes
 
 - validation images live under **`valid/`** (recommended). If that folder has no `_annotations.csv`, the loader falls back to **`val/`**.

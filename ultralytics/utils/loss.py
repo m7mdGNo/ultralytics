@@ -1268,12 +1268,18 @@ class CenterNetLoss(nn.Module):
         self.hyp = getattr(model, "args", None) or {}
 
     @staticmethod
-    def _focal_from_logits(pred: torch.Tensor, gt: torch.Tensor) -> torch.Tensor:
-        """Modified focal loss (Objects as Points) with logits; ``gt`` is sparse 0/1 heatmap."""
+    def _focal_from_logits(pred: torch.Tensor, gt: torch.Tensor, num_pos: int) -> torch.Tensor:
+        """Modified focal loss (Objects as Points) with logits; ``gt`` may be Gaussian-smoothed.
+
+        Normalizes by ``num_pos`` (supervised center count), not a full tensor mean. A global mean dilutes
+        gradients from rare positives across millions of background cells, pushes logits very negative, and
+        yields heatmap scores below val ``conf`` so mAP stays at zero while the reported focal still drops.
+        """
         pred = pred.sigmoid()
         pos_loss = torch.log(torch.clamp(pred, 1e-6)) * (1 - pred) ** 2 * gt
         neg_loss = torch.log(torch.clamp(1 - pred, 1e-6)) * pred**2 * (1 - gt) ** 4 * (1 - gt)
-        return -(pos_loss + neg_loss).mean()
+        denom = max(num_pos, 1)
+        return -(pos_loss + neg_loss).sum() / denom
 
     def _gain(self, key: str, default: float = 1.0) -> float:
         h = self.hyp
@@ -1326,7 +1332,8 @@ class CenterNetLoss(nn.Module):
             wh_target[b, 1, yi, xi] = math.log(h_pix)
             reg_mask[b, yi, xi] = 1.0
 
-        hm_loss = self._focal_from_logits(hm, hm_target)
+        num_pos = max(int(reg_mask.sum().item()), 1)
+        hm_loss = self._focal_from_logits(hm, hm_target, num_pos)
         m = reg_mask.unsqueeze(1)
         reg_loss = (F.l1_loss(reg, reg_target, reduction="none") * m).sum() / (reg_mask.sum() * 2.0 + 1e-6)
         wh_loss = (F.l1_loss(wh, wh_target, reduction="none") * m).sum() / (reg_mask.sum() * 2.0 + 1e-6)

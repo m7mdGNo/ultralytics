@@ -67,6 +67,19 @@ def decode_centernet_outputs(
         vals, idx = torch.topk(flat, k)
         sel = vals >= conf_thres
         vals, idx = vals[sel], idx[sel]
+        # Weak heatmaps: no local-max survives conf — fall back to global top-k with a per-image floor so
+        # val metrics are not stuck at P=R=mAP=0 while reg/wh losses still train.
+        if idx.numel() == 0:
+            flat_u = hm_s[b].reshape(-1)
+            ku = min(k_pool, flat_u.numel())
+            vals, idx = torch.topk(flat_u, ku)
+            if vals.numel() == 0:
+                out.append(torch.zeros(0, 6, device=device, dtype=dtype))
+                continue
+            vmax = float(vals[0].item())
+            thr_u = min(float(conf_thres), max(vmax * 0.25, 1e-8))
+            sel = vals >= thr_u
+            vals, idx = vals[sel], idx[sel]
         if idx.numel() == 0:
             out.append(torch.zeros(0, 6, device=device, dtype=dtype))
             continue

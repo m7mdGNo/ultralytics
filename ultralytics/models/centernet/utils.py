@@ -36,7 +36,7 @@ def decode_centernet_outputs(
     """
     hm_s = hm.sigmoid()
     pool = F.max_pool2d(hm_s, kernel_size=3, stride=1, padding=1)
-    keep = (hm_s == pool) & (hm_s >= conf_thres)
+    peak_mask = (hm_s == pool) & (hm_s >= conf_thres)
     B, nc, H, W = hm_s.shape
     device = hm.device
     dtype = hm.dtype
@@ -45,7 +45,7 @@ def decode_centernet_outputs(
     for b in range(B):
         dets = []
         for c in range(nc):
-            heat = hm_s[b, c] * keep[b, c].float()
+            heat = hm_s[b, c] * peak_mask[b, c].float()
             flat = heat.flatten()
             k = min(max_det * 4, flat.numel())
             if k == 0:
@@ -82,7 +82,7 @@ def decode_centernet_outputs(
             out.append(torch.zeros(0, 6, device=device, dtype=dtype))
             continue
         labels = torch.zeros_like(clses, dtype=torch.long) if agnostic else clses.long()
-        keep = torchvision.ops.batched_nms(boxes, scores, labels, iou_thres)
-        keep = keep[scores[keep].argsort(descending=True)[:max_det]]
-        out.append(pred[keep])
+        nms_idx = torchvision.ops.batched_nms(boxes, scores, labels, iou_thres)
+        nms_idx = nms_idx[scores[nms_idx].argsort(descending=True)[:max_det]]
+        out.append(pred[nms_idx])
     return out

@@ -519,6 +519,8 @@ class DetectionModel(BaseModel):
 class CenterNetDetectionModel(BaseModel):
     """CenterNet-style detector: single-scale heatmap + offset + box size (log) regression."""
 
+    end2end = False  # detection trainer checks this; CenterNet uses NMS at decode time, not E2E heads
+
     def __init__(self, cfg="centernet.yaml", ch=3, nc=None, verbose=True):
         """Initialize from YAML or dict; last layer must be :class:`CenterNetHead`."""
         super().__init__()

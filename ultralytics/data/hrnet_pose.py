@@ -11,6 +11,20 @@ import torch
 from torch.utils.data import Dataset
 
 
+def resolve_hrnet_validation_split(data_root: str | Path) -> Path:
+    """Return path to validation split: prefers ``valid/``, falls back to ``val/``.
+
+    Looks for ``_annotations.csv`` in each candidate folder.
+    """
+    root = Path(data_root)
+    for name in ("valid", "val"):
+        split = root / name
+        if (split / "_annotations.csv").exists():
+            return split
+    v1, v2 = root / "valid" / "_annotations.csv", root / "val" / "_annotations.csv"
+    raise FileNotFoundError(f"Expected {v1} or {v2}.")
+
+
 def parse_hrnet_pose_split(split_dir: str | Path) -> tuple[list[dict[str, Any]], list[str]]:
     """Parse a split folder containing images and `_annotations.csv`."""
     split_path = Path(split_dir)

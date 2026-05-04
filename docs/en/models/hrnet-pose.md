@@ -3,7 +3,7 @@
 This project now includes a custom HRNet-style keypoint model that:
 
 - predicts a **class heatmap** and **x/y offset**
-- uses a dataset folder with `train`, `val`, `test`
+- uses a dataset folder with `train`, `valid` (or legacy `val`), `test`
 - reads `_annotations.csv` in each split with:
   `filename,width,height,class,xmin,ymin,xmax,ymax`
 
@@ -15,7 +15,7 @@ your_dataset/
     _annotations.csv
     image1.jpg
     image2.jpg
-  val/
+  valid/
     _annotations.csv
     image3.jpg
   test/
@@ -86,6 +86,7 @@ yolo train model=ultralytics/cfg/models/v8/hrnet_pose.yaml data=/absolute/path/t
 
 ## Notes
 
+- validation images live under **`valid/`** (recommended). If that folder has no `_annotations.csv`, the loader falls back to **`val/`**.
 - task uses `pose` mode internally
 - classes are inferred from `class` names found in split CSV files
 - this implementation is optimized for center-keypoint style supervision from bbox CSV annotations

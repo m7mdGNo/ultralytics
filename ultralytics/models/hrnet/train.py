@@ -7,7 +7,7 @@ from typing import Any
 from torch.utils.data import DataLoader
 
 from ultralytics.data.build import build_dataloader
-from ultralytics.data.hrnet_pose import HRNetPoseDataset, parse_hrnet_pose_split
+from ultralytics.data.hrnet_pose import HRNetPoseDataset, parse_hrnet_pose_split, resolve_hrnet_validation_split
 from ultralytics.engine.trainer import BaseTrainer
 from ultralytics.models.hrnet.nn import HRNetPoseModel
 from ultralytics.models.hrnet.val import HRNetPoseValidator
@@ -28,7 +28,7 @@ class HRNetPoseTrainer(BaseTrainer):
             raise FileNotFoundError(f"Dataset path does not exist: {data_root}")
 
         train_samples, train_names = parse_hrnet_pose_split(data_root / "train")
-        val_samples, val_names = parse_hrnet_pose_split(data_root / "val")
+        val_samples, val_names = parse_hrnet_pose_split(resolve_hrnet_validation_split(data_root))
         test_samples, test_names = parse_hrnet_pose_split(data_root / "test")
         names = sorted(set(train_names) | set(val_names) | set(test_names))
         if not names:

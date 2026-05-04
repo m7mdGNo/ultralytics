@@ -1,0 +1,4 @@
+# Ultralytics HRNet Pose (center-keypoint) config
+# This config is consumed by ultralytics.models.hrnet.HRNetPoseModel.
+
+width: 32

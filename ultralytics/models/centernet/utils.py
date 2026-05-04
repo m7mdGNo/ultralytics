@@ -20,6 +20,8 @@ def decode_centernet_outputs(
 ) -> list[torch.Tensor]:
     """Decode CenterNet heatmap / offset / WH tensors to per-image ``[N, 6]`` xyxy + conf + cls (letterbox space).
 
+    Vectorized over classes and candidates (no Python per-pixel loops) so validation stays responsive on large ``nc``.
+
     Args:
         hm (torch.Tensor): Heatmap logits ``(B, nc, H, W)``.
         reg (torch.Tensor): Sub-pixel offset ``(B, 2, H, W)`` added to integer cell indices.
@@ -37,52 +39,62 @@ def decode_centernet_outputs(
     hm_s = hm.sigmoid()
     pool = F.max_pool2d(hm_s, kernel_size=3, stride=1, padding=1)
     peak_mask = (hm_s == pool) & (hm_s >= conf_thres)
-    B, nc, H, W = hm_s.shape
+    masked = hm_s * peak_mask.to(dtype=hm_s.dtype)
+
+    B, nc, H, W = masked.shape
+    HW = H * W
     device = hm.device
     dtype = hm.dtype
+    k_pool = min(max(max_det * 25, 256), nc * HW)
     out: list[torch.Tensor] = []
 
     for b in range(B):
-        dets = []
-        for c in range(nc):
-            heat = hm_s[b, c] * peak_mask[b, c].float()
-            flat = heat.flatten()
-            k = min(max_det * 4, flat.numel())
-            if k == 0:
-                continue
-            vals, inds = torch.topk(flat, k)
-            for v, ix in zip(vals, inds):
-                if float(v) < conf_thres:
-                    break
-                ix = int(ix)
-                yi, xi = divmod(ix, W)
-                ox = (float(xi) + float(reg[b, 0, yi, xi])) * stride
-                oy = (float(yi) + float(reg[b, 1, yi, xi])) * stride
-                ww = float(torch.exp(wh[b, 0, yi, xi]))
-                hh = float(torch.exp(wh[b, 1, yi, xi]))
-                row = torch.tensor(
-                    [ox - ww / 2, oy - hh / 2, ox + ww / 2, oy + hh / 2, float(v), float(c)],
-                    device=device,
-                    dtype=dtype,
-                )
-                dets.append(row)
-
-        if not dets:
+        flat = masked[b].reshape(-1)
+        k = min(k_pool, flat.numel())
+        vals, idx = torch.topk(flat, k)
+        sel = vals >= conf_thres
+        vals, idx = vals[sel], idx[sel]
+        if idx.numel() == 0:
             out.append(torch.zeros(0, 6, device=device, dtype=dtype))
             continue
 
-        pred = torch.stack(dets, 0)
-        boxes, scores, clses = pred[:, :4], pred[:, 4], pred[:, 5]
+        c = idx // HW
+        rem = idx % HW
+        yi = rem // W
+        xi = rem % W
+
+        reg_b = reg[b]
+        wh_b = wh[b]
+        dt = reg_b.dtype
+        ox = (xi.to(dt) + reg_b[0, yi, xi]) * stride
+        oy = (yi.to(dt) + reg_b[1, yi, xi]) * stride
+        ww = torch.exp(wh_b[0, yi, xi])
+        hh = torch.exp(wh_b[1, yi, xi])
+        x1 = ox - ww * 0.5
+        y1 = oy - hh * 0.5
+        x2 = ox + ww * 0.5
+        y2 = oy + hh * 0.5
+
+        pred = torch.stack((x1, y1, x2, y2, vals.to(dt), c.to(dt)), dim=1)
+
         if classes is not None:
-            m = torch.zeros_like(scores, dtype=torch.bool)
-            for ci in classes:
-                m |= clses == ci
-            pred, boxes, scores, clses = pred[m], boxes[m], scores[m], clses[m]
-        if scores.shape[0] == 0:
+            cls_keep = torch.tensor(classes, device=device, dtype=torch.long)
+            pred = pred[torch.isin(pred[:, 5].long(), cls_keep)]
+        if pred.shape[0] == 0:
             out.append(torch.zeros(0, 6, device=device, dtype=dtype))
             continue
-        labels = torch.zeros_like(clses, dtype=torch.long) if agnostic else clses.long()
-        nms_idx = torchvision.ops.batched_nms(boxes, scores, labels, iou_thres)
+
+        boxes = pred[:, :4]
+        scores = pred[:, 4]
+        clses = pred[:, 5]
+        labels = torch.zeros(pred.shape[0], dtype=torch.long, device=device) if agnostic else clses.long()
+        # float32 boxes for NMS stability under AMP/half
+        nms_idx = torchvision.ops.batched_nms(
+            boxes.float(), scores.float(), labels, float(iou_thres)
+        )
+        if nms_idx.numel() == 0:
+            out.append(torch.zeros(0, 6, device=device, dtype=dtype))
+            continue
         nms_idx = nms_idx[scores[nms_idx].argsort(descending=True)[:max_det]]
-        out.append(pred[nms_idx])
+        out.append(pred[nms_idx].to(dtype=dtype))
     return out

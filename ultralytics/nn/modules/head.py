@@ -20,7 +20,18 @@ from .conv import Conv, DWConv
 from .transformer import MLP, DeformableTransformerDecoder, DeformableTransformerDecoderLayer
 from .utils import bias_init_with_prob, linear_init
 
-__all__ = "OBB", "Classify", "Detect", "Pose", "RTDETRDecoder", "Segment", "YOLOEDetect", "YOLOESegment", "v10Detect"
+__all__ = (
+    "OBB",
+    "CenterNetHead",
+    "Classify",
+    "Detect",
+    "Pose",
+    "RTDETRDecoder",
+    "Segment",
+    "YOLOEDetect",
+    "YOLOESegment",
+    "v10Detect",
+)
 
 
 class Detect(nn.Module):
@@ -1777,3 +1788,54 @@ class v10Detect(Detect):
     def fuse(self):
         """Remove the one2many head for inference optimization."""
         self.cv2 = self.cv3 = None
+
+
+class CenterNetHead(nn.Module):
+    """CenterNet-style detection head: heatmap (centers), sub-pixel offset, and width/height (log-space).
+
+    Outputs are at a fixed downsample factor relative to the input image (set via ``stride`` on the module after
+    model init). Training uses focal loss on the heatmap and regression losses at peak locations.
+
+    Attributes:
+        nc (int): Number of classes.
+        stride (torch.Tensor): Output stride relative to input, shape ``(1,)``.
+        conv (nn.Sequential): Shared feature refinement.
+        hm (nn.Conv2d): Heatmap logits ``(B, nc, H, W)``.
+        reg (nn.Conv2d): Offset from integer heatmap cell to continuous center ``(B, 2, H, W)``.
+        wh (nn.Conv2d): Log-size (w, h) in pixels at each location ``(B, 2, H, W)``.
+    """
+
+    def __init__(self, c1: int, nc: int = 80, hid: int = 256):
+        """Initialize CenterNet head.
+
+        Args:
+            c1 (int): Input channels from the backbone feature map.
+            nc (int): Number of object classes.
+            hid (int): Hidden channels in the refinement stack.
+        """
+        super().__init__()
+        self.nc = nc
+        self.stride = torch.tensor([4.0])  # overwritten by CenterNetDetectionModel after warmup forward
+        self.conv = nn.Sequential(Conv(c1, hid, 3), Conv(hid, hid, 3))
+        self.hm = nn.Conv2d(hid, nc, 1)
+        self.reg = nn.Conv2d(hid, 2, 1)
+        self.wh = nn.Conv2d(hid, 2, 1)
+        self._init_biases()
+
+    def _init_biases(self):
+        """Bias heatmap to predict low probability before training."""
+        b = -2.19  # sigmoid(-2.19) ~ 0.1
+        constant_(self.hm.bias, b)
+
+    def forward(self, x: torch.Tensor | list[torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Run head forward pass.
+
+        Args:
+            x (torch.Tensor | list[torch.Tensor]): Single feature map or list containing one map.
+
+        Returns:
+            (tuple): ``(heatmap_logits, offset, wh_log)`` each with spatial size ``H/s × W/s``.
+        """
+        x = x[0] if isinstance(x, (list, tuple)) else x
+        feat = self.conv(x)
+        return self.hm(feat), self.reg(feat), self.wh(feat)

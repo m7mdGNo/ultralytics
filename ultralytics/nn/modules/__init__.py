@@ -79,6 +79,7 @@ from .conv import (
 from .head import (
     OBB,
     OBB26,
+    CenterNetHead,
     Classify,
     Detect,
     LRPCHead,
@@ -140,6 +141,7 @@ __all__ = (
     "C3x",
     "CBFuse",
     "CBLinear",
+    "CenterNetHead",
     "ChannelAttention",
     "Classify",
     "Concat",

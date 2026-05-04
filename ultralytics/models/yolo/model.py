@@ -71,6 +71,12 @@ class YOLO(Model):
             new_instance = YOLOE(path, task=task, verbose=verbose)
             self.__class__ = type(new_instance)
             self.__dict__ = new_instance.__dict__
+        elif "centernet" in path.stem.lower() and path.suffix in {".pt", ".yaml", ".yml"}:
+            from ultralytics.models.centernet import CenterNet
+
+            new_instance = CenterNet(path, task=task, verbose=verbose)
+            self.__class__ = type(new_instance)
+            self.__dict__ = new_instance.__dict__
         else:
             # Continue with default YOLO initialization
             super().__init__(model=model, task=task, verbose=verbose)

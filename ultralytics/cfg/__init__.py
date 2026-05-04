@@ -970,6 +970,10 @@ def entrypoint(debug: str = "") -> None:
         from ultralytics import SAM
 
         model = SAM(model)
+    elif "centernet" in stem:
+        from ultralytics import CenterNet
+
+        model = CenterNet(model, task=task)
     else:
         from ultralytics import YOLO
 

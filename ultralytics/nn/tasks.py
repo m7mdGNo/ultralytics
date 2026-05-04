@@ -39,6 +39,7 @@ from ultralytics.nn.modules import (
     C3x,
     CBFuse,
     CBLinear,
+    CenterNetHead,
     Classify,
     Concat,
     Conv,
@@ -76,6 +77,7 @@ from ultralytics.nn.modules import (
 from ultralytics.utils import DEFAULT_CFG_DICT, LOGGER, SETTINGS, WINDOWS, YAML, colorstr, emojis
 from ultralytics.utils.checks import REMOTE_FILE_PREFIXES, check_file, check_requirements, check_suffix, check_yaml
 from ultralytics.utils.loss import (
+    CenterNetLoss,
     E2ELoss,
     PoseLoss26,
     v8ClassificationLoss,
@@ -512,6 +514,49 @@ class DetectionModel(BaseModel):
     def init_criterion(self):
         """Initialize the loss criterion for the DetectionModel."""
         return E2ELoss(self) if getattr(self, "end2end", False) else v8DetectionLoss(self)
+
+
+class CenterNetDetectionModel(BaseModel):
+    """CenterNet-style detector: single-scale heatmap + offset + box size (log) regression."""
+
+    def __init__(self, cfg="centernet.yaml", ch=3, nc=None, verbose=True):
+        """Initialize from YAML or dict; last layer must be :class:`CenterNetHead`."""
+        super().__init__()
+        self.yaml = cfg if isinstance(cfg, dict) else yaml_model_load(cfg)
+        if self.yaml["backbone"][0][2] == "Silence":
+            LOGGER.warning(
+                "YOLOv9 `Silence` module is deprecated in favor of torch.nn.Identity. "
+                "Please delete local *.pt file and re-download the latest model checkpoint."
+            )
+            self.yaml["backbone"][0][2] = "nn.Identity"
+
+        self.yaml["channels"] = ch
+        if nc and nc != self.yaml["nc"]:
+            LOGGER.info(f"Overriding model.yaml nc={self.yaml['nc']} with nc={nc}")
+            self.yaml["nc"] = nc
+        self.model, self.save = parse_model(deepcopy(self.yaml), ch=ch, verbose=verbose)
+        self.names = {i: f"{i}" for i in range(self.yaml["nc"])}
+        self.inplace = self.yaml.get("inplace", True)
+
+        m = self.model[-1]
+        if not isinstance(m, CenterNetHead):
+            raise TypeError(f"CenterNetDetectionModel requires CenterNetHead as last layer, got {type(m)}")
+        s = 256
+        self.model.eval()
+        with torch.no_grad():
+            hm, _, _ = self._predict_once(torch.zeros(1, ch, s, s))
+        self.stride = torch.tensor([s / hm.shape[-2]], dtype=torch.float32)
+        m.stride = self.stride
+        self.model.train()
+
+        initialize_weights(self)
+        if verbose:
+            self.info()
+            LOGGER.info("")
+
+    def init_criterion(self):
+        """Initialize CenterNet focal + regression losses."""
+        return CenterNetLoss(self)
 
 
 class OBBModel(DetectionModel):
@@ -1706,6 +1751,10 @@ def parse_model(d, ch, verbose=True):
             args.insert(1, [ch[x] for x in f])  # channels as second arg
         elif m is RTDETRDecoder:  # special case, channels arg must be passed in index 1
             args.insert(1, [ch[x] for x in f])
+        elif m is CenterNetHead:
+            c1 = ch[f] if isinstance(f, int) else ch[f[0]]
+            args = [c1, nc]
+            c2 = c1
         elif m is CBLinear:
             c2 = args[0]
             c1 = ch[f]
@@ -1786,6 +1835,8 @@ def guess_model_task(model):
         m = cfg["head"][-1][-2].lower()  # output module name
         if m in {"classify", "classifier", "cls", "fc"}:
             return "classify"
+        if "centernet" in m:
+            return "detect"
         if "detect" in m:
             return "detect"
         if "segment" in m:
@@ -1817,6 +1868,8 @@ def guess_model_task(model):
             elif isinstance(m, OBB):
                 return "obb"
             elif isinstance(m, (Detect, WorldDetect, YOLOEDetect, v10Detect)):
+                return "detect"
+            elif isinstance(m, CenterNetHead):
                 return "detect"
 
     # Guess from model filename

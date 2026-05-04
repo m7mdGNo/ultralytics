@@ -1254,3 +1254,78 @@ class TVPSegmentLoss(TVPDetectLoss):
         vp_loss = self.vp_criterion(preds, batch)
         cls_loss = vp_loss[0][2]
         return cls_loss, vp_loss[1]
+
+
+class CenterNetLoss(nn.Module):
+    """CenterNet-style loss: modified focal loss on heatmaps plus L1 on offset and size at object centers."""
+
+    def __init__(self, model):
+        """Initialize CenterNet loss from a :class:`~ultralytics.nn.tasks.CenterNetDetectionModel` instance."""
+        super().__init__()
+        m = model.model[-1]
+        self.stride = float(m.stride.view(-1)[0].item()) if m.stride.numel() else 4.0
+        self.nc = m.nc
+        self.hyp = getattr(model, "args", None) or {}
+
+    @staticmethod
+    def _focal_from_logits(pred: torch.Tensor, gt: torch.Tensor) -> torch.Tensor:
+        """Modified focal loss (Objects as Points) with logits; ``gt`` is sparse 0/1 heatmap."""
+        pred = pred.sigmoid()
+        pos_loss = torch.log(torch.clamp(pred, 1e-6)) * (1 - pred) ** 2 * gt
+        neg_loss = torch.log(torch.clamp(1 - pred, 1e-6)) * pred**2 * (1 - gt) ** 4 * (1 - gt)
+        return -(pos_loss + neg_loss).mean()
+
+    def _gain(self, key: str, default: float = 1.0) -> float:
+        h = self.hyp
+        if isinstance(h, dict):
+            return float(h.get(key, default))
+        return float(getattr(h, key, default))
+
+    def forward(self, preds: tuple[torch.Tensor, torch.Tensor, torch.Tensor], batch: dict[str, Any]) -> tuple[torch.Tensor, torch.Tensor]:
+        """Compute heatmap focal, offset L1, and WH L1 losses."""
+        hm, reg, wh = preds
+        device = hm.device
+        B, _, Ht, Wt = hm.shape
+        H, W = batch["img"].shape[2], batch["img"].shape[3]
+        stride = self.stride
+
+        hm_target = torch.zeros_like(hm)
+        reg_target = torch.zeros_like(reg)
+        wh_target = torch.zeros_like(wh)
+        reg_mask = torch.zeros(B, Ht, Wt, device=device)
+
+        bidx = batch["batch_idx"].view(-1).long()
+        cls = batch["cls"].view(-1).long()
+        boxes = batch["bboxes"].to(device)
+        num_objects = int(boxes.shape[0])
+
+        for i in range(num_objects):
+            b = int(bidx[i])
+            c = int(cls[i])
+            if c < 0 or c >= self.nc:
+                continue
+            cx, cy, bw, bh = boxes[i].tolist()
+            cx_pix, cy_pix = cx * W, cy * H
+            w_pix, h_pix = max(bw * W, 1e-6), max(bh * H, 1e-6)
+            xi = int(min(max(cx_pix / stride, 0.0), Wt - 1))
+            yi = int(min(max(cy_pix / stride, 0.0), Ht - 1))
+
+            hm_target[b, c, yi, xi] = 1.0
+            reg_target[b, 0, yi, xi] = cx_pix / stride - xi
+            reg_target[b, 1, yi, xi] = cy_pix / stride - yi
+            wh_target[b, 0, yi, xi] = math.log(w_pix)
+            wh_target[b, 1, yi, xi] = math.log(h_pix)
+            reg_mask[b, yi, xi] = 1.0
+
+        hm_loss = self._focal_from_logits(hm, hm_target)
+        m = reg_mask.unsqueeze(1)
+        reg_loss = (F.l1_loss(reg, reg_target, reduction="none") * m).sum() / (reg_mask.sum() * 2.0 + 1e-6)
+        wh_loss = (F.l1_loss(wh, wh_target, reduction="none") * m).sum() / (reg_mask.sum() * 2.0 + 1e-6)
+
+        hm_loss = hm_loss * self._gain("cls", 1.0)
+        reg_loss = reg_loss * self._gain("box", 1.0)
+        wh_loss = wh_loss * self._gain("box", 1.0)
+
+        loss_items = torch.stack((hm_loss.detach(), reg_loss.detach(), wh_loss.detach()))
+        total = hm_loss + reg_loss + wh_loss
+        return total * B, loss_items

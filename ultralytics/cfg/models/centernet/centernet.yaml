@@ -1,0 +1,31 @@
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
+#
+# CenterNet-style object detection: class heatmaps + sub-pixel offset + log width/height.
+#
+# Python API:
+#   from ultralytics import CenterNet
+#   CenterNet().train(data="coco8.yaml", epochs=100, imgsz=640)
+#
+# CLI (task=detect is optional; model stem must include "centernet"):
+#   yolo train task=detect model=centernet.yaml data=coco8.yaml epochs=100 imgsz=640
+#   yolo val model=path/to/centernet.pt data=coco8.yaml
+#   yolo predict model=path/to/centernet.pt source=path/to/images conf=0.3
+
+# Parameters
+nc: 80 # number of classes
+scales: # compound scaling
+  n: [0.33, 0.25, 1024]
+  s: [0.33, 0.50, 1024]
+  m: [0.67, 0.75, 768]
+  l: [1.00, 1.00, 512]
+  x: [1.00, 1.25, 512]
+
+# Lightweight backbone ending at stride 4 (P2)
+backbone:
+  # [from, repeats, module, args]
+  - [-1, 1, Conv, [64, 3, 2]] # 0-P1/2
+  - [-1, 1, Conv, [128, 3, 2]] # 1-P2/4
+  - [-1, 2, C3k2, [256, False, 0.25]] # 2
+
+head:
+  - [-1, 1, CenterNetHead, [nc]] # heatmap + reg + wh at stride 4

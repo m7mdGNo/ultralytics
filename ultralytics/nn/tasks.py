@@ -1755,7 +1755,10 @@ def parse_model(d, ch, verbose=True):
             args.insert(1, [ch[x] for x in f])
         elif m is CenterNetHead:
             c1 = ch[f] if isinstance(f, int) else ch[f[0]]
-            args = [c1, nc]
+            # YAML e.g. [nc] or [nc, hid] — optional hid widens the heatmap / reg / wh tower
+            n_cls = int(args[0]) if args else nc
+            hid = int(args[1]) if len(args) > 1 else 384
+            args = [c1, n_cls, hid]
             c2 = c1
         elif m is CBLinear:
             c2 = args[0]

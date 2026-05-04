@@ -10,6 +10,8 @@
 #   yolo train task=detect model=centernet.yaml data=coco8.yaml epochs=100 imgsz=640
 #   yolo val model=path/to/centernet.pt data=coco8.yaml
 #   yolo predict model=path/to/centernet.pt source=path/to/images conf=0.3
+#
+# Architecture: deeper P2–P3 backbone, FPN-style fuse back to stride-4, wider CenterNetHead [nc, hid].
 
 # Parameters
 nc: 80 # number of classes
@@ -20,12 +22,20 @@ scales: # compound scaling
   l: [1.00, 1.00, 512]
   x: [1.00, 1.25, 512]
 
-# Lightweight backbone ending at stride 4 (P2)
+# Backbone: P1/2 → P2/4 → P3/8 with stacked C3k2 (more capacity than the minimal 4-layer stub)
 backbone:
   # [from, repeats, module, args]
   - [-1, 1, Conv, [64, 3, 2]] # 0-P1/2
   - [-1, 1, Conv, [128, 3, 2]] # 1-P2/4
   - [-1, 2, C3k2, [256, False, 0.25]] # 2
+  - [-1, 2, C3k2, [256, False, 0.25]] # 3 extra context at stride 4
+  - [-1, 1, Conv, [256, 3, 2]] # 4-P3/8
+  - [-1, 2, C3k2, [512, True]] # 5
+  - [-1, 2, C3k2, [512, True]] # 6
 
+# Neck: upsample P3 → P2 grid, concat with P2 features, fuse (heatmap still at stride 4)
 head:
-  - [-1, 1, CenterNetHead, [nc]] # heatmap + reg + wh at stride 4
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]] # 7 → H/4, W/4
+  - [[-1, 3], 1, Concat, [1]] # 8 cat with layer 3 (same stride as layer 2 path; rich P2 + P3)
+  - [-1, 2, C3k2, [384, True]] # 9 fuse
+  - [-1, 1, CenterNetHead, [nc, 448]] # heatmap + reg + wh; second arg = hid channels

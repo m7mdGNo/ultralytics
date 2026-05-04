@@ -1805,18 +1805,18 @@ class CenterNetHead(nn.Module):
         wh (nn.Conv2d): Log-size (w, h) in pixels at each location ``(B, 2, H, W)``.
     """
 
-    def __init__(self, c1: int, nc: int = 80, hid: int = 256):
+    def __init__(self, c1: int, nc: int = 80, hid: int = 384):
         """Initialize CenterNet head.
 
         Args:
             c1 (int): Input channels from the backbone feature map.
             nc (int): Number of object classes.
-            hid (int): Hidden channels in the refinement stack.
+            hid (int): Hidden channels in the refinement stack (wider = more capacity for heatmap / offset / WH).
         """
         super().__init__()
         self.nc = nc
         self.stride = torch.tensor([4.0])  # overwritten by CenterNetDetectionModel after warmup forward
-        self.conv = nn.Sequential(Conv(c1, hid, 3), Conv(hid, hid, 3))
+        self.conv = nn.Sequential(Conv(c1, hid, 3), Conv(hid, hid, 3), Conv(hid, hid, 3))
         self.hm = nn.Conv2d(hid, nc, 1)
         self.reg = nn.Conv2d(hid, 2, 1)
         self.wh = nn.Conv2d(hid, 2, 1)

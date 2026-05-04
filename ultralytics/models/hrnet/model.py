@@ -14,6 +14,8 @@ class HRNetPose(Model):
     """HRNet-style keypoint-center model (heatmap + offset)."""
 
     def __init__(self, model: str | Path = "hrnet_pose.yaml", task: str | None = "pose", verbose: bool = False):
+        # CLI passes task=None explicitly; HRNetPose only supports pose (see task_map).
+        task = task or "pose"
         super().__init__(model=model, task=task, verbose=verbose)
 
     @property

@@ -2,3 +2,4 @@
 # This config is consumed by ultralytics.models.hrnet.HRNetPoseModel.
 
 width: 32
+hrnet_pose: true  # lets guess_model_task(cfg_dict) return pose without a YOLO "head"

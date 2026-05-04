@@ -101,6 +101,7 @@ pip install --no-cache-dir "git+https://github.com/m7mdGNo/ultralytics.git"
 from ultralytics.models.hrnet import nn as hrnet_nn
 
 assert getattr(hrnet_nn, "HRNET_NN_REV", 0) >= 2, "Old ultralytics; reinstall from GitHub"
+# Rev 3+ includes criterion placeholder for end-of-epoch trainer hook.
 print("HRNET_NN_REV", hrnet_nn.HRNET_NN_REV)
 ```
 

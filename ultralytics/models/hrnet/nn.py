@@ -5,10 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 import torch
-
-HRNET_NN_REV = 2  # >=2: _build_targets(..., dtype) fix; stale Colab installs often stay on rev 0/1
 import torch.nn as nn
 import torch.nn.functional as F
+
+# Bump when training hotfixes land (verify after pip install).
+HRNET_NN_REV = 3  # 3: criterion placeholder for BaseTrainer epoch-end hook
 
 
 class ConvBNAct(nn.Module):
@@ -73,6 +74,8 @@ class HRNetPoseModel(nn.Module):
         self.hm_head = nn.Conv2d(hidden, self.nc, 1)
         self.off_head = nn.Conv2d(hidden, 2, 1)
         nn.init.constant_(self.hm_head.bias, -2.19)  # low initial confidence
+        # BaseTrainer._do_train calls hasattr(self.criterion, "update"); YOLO uses a loss module there.
+        self.criterion = nn.Module()  # no-op; no .update — hook is skipped
 
     def forward(self, x: torch.Tensor | dict[str, torch.Tensor], *args, **kwargs):
         if isinstance(x, dict):

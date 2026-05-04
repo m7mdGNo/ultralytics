@@ -84,13 +84,17 @@ class HRNetPoseModel(nn.Module):
         return self.hm_head(feat), self.off_head(feat)
 
     def _build_targets(
-        self, batch: dict[str, torch.Tensor], out_h: int, out_w: int, device: torch.device
+        self,
+        batch: dict[str, torch.Tensor],
+        out_h: int,
+        out_w: int,
+        device: torch.device,
+        dtype: torch.dtype,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         b = batch["img"].shape[0]
-        dt = hm_p.dtype
-        hm_t = torch.zeros((b, self.nc, out_h, out_w), device=device, dtype=dt)
-        off_t = torch.zeros((b, 2, out_h, out_w), device=device, dtype=dt)
-        mask = torch.zeros((b, 1, out_h, out_w), device=device, dtype=dt)
+        hm_t = torch.zeros((b, self.nc, out_h, out_w), device=device, dtype=dtype)
+        off_t = torch.zeros((b, 2, out_h, out_w), device=device, dtype=dtype)
+        mask = torch.zeros((b, 1, out_h, out_w), device=device, dtype=dtype)
 
         if batch["bboxes"].numel() == 0:
             return hm_t, off_t, mask
@@ -126,7 +130,9 @@ class HRNetPoseModel(nn.Module):
         preds: tuple[torch.Tensor, torch.Tensor] | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         hm_p, off_p = preds if preds is not None else self.predict(batch["img"])
-        hm_t, off_t, mask = self._build_targets(batch, hm_p.shape[-2], hm_p.shape[-1], hm_p.device)
+        hm_t, off_t, mask = self._build_targets(
+            batch, hm_p.shape[-2], hm_p.shape[-1], hm_p.device, hm_p.dtype
+        )
 
         hm_loss = F.binary_cross_entropy_with_logits(hm_p, hm_t)
         denom = mask.sum().clamp(min=1.0)

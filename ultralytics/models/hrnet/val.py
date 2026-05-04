@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 import torch
@@ -14,6 +15,8 @@ class HRNetPoseValidator(BaseValidator):
     def __init__(self, dataloader=None, save_dir=None, args=None, _callbacks: dict | None = None):
         super().__init__(dataloader, save_dir, args, _callbacks)
         self.args.task = "pose"
+        # BaseTrainer._setup_train expects self.metrics.keys (like DetMetrics.keys).
+        self.metrics = SimpleNamespace(keys=["metrics/l2", "metrics/acc8"])
         self.total_points = 0
         self.total_l2 = 0.0
         self.total_hits = 0

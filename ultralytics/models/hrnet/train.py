@@ -4,6 +4,7 @@ from copy import copy
 from pathlib import Path
 from typing import Any
 
+import torch
 from torch.utils.data import DataLoader
 
 from ultralytics.data.build import build_dataloader
@@ -21,6 +22,14 @@ class HRNetPoseTrainer(BaseTrainer):
         overrides = overrides or {}
         overrides["task"] = "pose"
         super().__init__(cfg, overrides, _callbacks)
+
+    def preprocess_batch(self, batch: dict) -> dict:
+        """Move tensors to device; keep images float32 (dataset is already 0–1, do not divide by 255)."""
+        for k, v in batch.items():
+            if isinstance(v, torch.Tensor):
+                batch[k] = v.to(self.device, non_blocking=self.device.type == "cuda")
+        batch["img"] = batch["img"].float()
+        return batch
 
     def get_dataset(self) -> dict[str, Any]:
         data_root = Path(self.args.data)

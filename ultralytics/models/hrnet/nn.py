@@ -76,6 +76,9 @@ class HRNetPoseModel(nn.Module):
         return self.predict(x)
 
     def predict(self, x: torch.Tensor, *args, **kwargs) -> tuple[torch.Tensor, torch.Tensor]:
+        # Match device/dtype to weights (AMP keeps params fp32; CPU batches must be moved in trainer).
+        p = next(self.parameters())
+        x = x.to(device=p.device, dtype=p.dtype)
         feat = self.backbone(x)
         feat = self.head(feat)
         return self.hm_head(feat), self.off_head(feat)
@@ -84,9 +87,10 @@ class HRNetPoseModel(nn.Module):
         self, batch: dict[str, torch.Tensor], out_h: int, out_w: int, device: torch.device
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         b = batch["img"].shape[0]
-        hm_t = torch.zeros((b, self.nc, out_h, out_w), device=device)
-        off_t = torch.zeros((b, 2, out_h, out_w), device=device)
-        mask = torch.zeros((b, 1, out_h, out_w), device=device)
+        dt = hm_p.dtype
+        hm_t = torch.zeros((b, self.nc, out_h, out_w), device=device, dtype=dt)
+        off_t = torch.zeros((b, 2, out_h, out_w), device=device, dtype=dt)
+        mask = torch.zeros((b, 1, out_h, out_w), device=device, dtype=dt)
 
         if batch["bboxes"].numel() == 0:
             return hm_t, off_t, mask

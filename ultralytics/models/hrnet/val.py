@@ -5,6 +5,8 @@ from typing import Any
 
 import torch
 
+from ultralytics.data.build import build_dataloader
+from ultralytics.data.hrnet_pose import HRNetPoseDataset
 from ultralytics.engine.validator import BaseValidator
 from ultralytics.utils import LOGGER
 
@@ -29,6 +31,23 @@ class HRNetPoseValidator(BaseValidator):
 
     def postprocess(self, preds):
         return preds
+
+    def get_dataloader(self, dataset_path, batch_size: int):
+        """Build val loader from ``data['val']`` sample list (HRNet CSV layout)."""
+        if not isinstance(dataset_path, list):
+            raise TypeError(
+                f"HRNetPoseValidator expected a sample list for split={self.args.split!r}; got {type(dataset_path)}"
+            )
+        dataset = HRNetPoseDataset(samples=dataset_path, imgsz=self.args.imgsz, augment=False)
+        return build_dataloader(
+            dataset,
+            batch=batch_size,
+            workers=self.args.workers,
+            shuffle=False,
+            rank=-1,
+            drop_last=False,
+            pin_memory=self.training,
+        )
 
     def init_metrics(self, model):
         self.total_points = 0

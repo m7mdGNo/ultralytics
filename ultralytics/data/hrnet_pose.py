@@ -11,6 +11,36 @@ import torch
 from torch.utils.data import Dataset
 
 
+def build_hrnet_pose_data_dict(data_root: str | Path) -> dict[str, Any]:
+    """Build the Ultralytics ``data`` dict for HRNet CSV folder datasets (used by train and standalone val)."""
+    root = Path(data_root).expanduser().resolve()
+    if not root.is_dir():
+        raise FileNotFoundError(f"HRNet dataset root is not a directory: {root}")
+
+    train_samples, train_names = parse_hrnet_pose_split(root / "train")
+    val_samples, val_names = parse_hrnet_pose_split(resolve_hrnet_validation_split(root))
+    test_samples, test_names = parse_hrnet_pose_split(root / "test")
+    names = sorted(set(train_names) | set(val_names) | set(test_names))
+    if not names:
+        raise RuntimeError(f"No classes found under {root}")
+
+    name_to_idx = {n: i for i, n in enumerate(names)}
+    for split in (train_samples, val_samples, test_samples):
+        for s in split:
+            s["cls"] = [name_to_idx[n] for n in s["cls_name"]]
+
+    return {
+        "path": root,
+        "train": train_samples,
+        "val": val_samples,
+        "test": test_samples,
+        "names": {i: n for i, n in enumerate(names)},
+        "nc": len(names),
+        "channels": 3,
+        "kpt_shape": [1, 3],
+    }
+
+
 def resolve_hrnet_validation_split(data_root: str | Path) -> Path:
     """Return path to validation split: prefers ``valid/``, falls back to ``val/``.
 

@@ -193,6 +193,15 @@ class BaseValidator:
                 self.data = check_det_dataset(self.args.data)
             elif self.args.task == "classify":
                 self.data = check_cls_dataset(self.args.data, split=self.args.split)
+            elif (
+                self.args.task == "pose"
+                and Path(self.args.data).expanduser().is_dir()
+                and (Path(self.args.data) / "train" / "_annotations.csv").is_file()
+            ):
+                # HRNetPose CSV layout: data root with train/valid|val/test + _annotations.csv (not a YAML).
+                from ultralytics.data.hrnet_pose import build_hrnet_pose_data_dict
+
+                self.data = build_hrnet_pose_data_dict(Path(self.args.data))
             else:
                 raise FileNotFoundError(emojis(f"Dataset '{self.args.data}' for task={self.args.task} not found ❌"))
 

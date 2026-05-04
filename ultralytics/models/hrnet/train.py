@@ -8,7 +8,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from ultralytics.data.build import build_dataloader
-from ultralytics.data.hrnet_pose import HRNetPoseDataset, parse_hrnet_pose_split, resolve_hrnet_validation_split
+from ultralytics.data.hrnet_pose import HRNetPoseDataset, build_hrnet_pose_data_dict
 from ultralytics.engine.trainer import BaseTrainer
 from ultralytics.models.hrnet.nn import HRNetPoseModel
 from ultralytics.models.hrnet.val import HRNetPoseValidator
@@ -35,29 +35,7 @@ class HRNetPoseTrainer(BaseTrainer):
         data_root = Path(self.args.data)
         if not data_root.exists():
             raise FileNotFoundError(f"Dataset path does not exist: {data_root}")
-
-        train_samples, train_names = parse_hrnet_pose_split(data_root / "train")
-        val_samples, val_names = parse_hrnet_pose_split(resolve_hrnet_validation_split(data_root))
-        test_samples, test_names = parse_hrnet_pose_split(data_root / "test")
-        names = sorted(set(train_names) | set(val_names) | set(test_names))
-        if not names:
-            raise RuntimeError(f"No classes found in {data_root}")
-
-        name_to_idx = {n: i for i, n in enumerate(names)}
-        for split in (train_samples, val_samples, test_samples):
-            for s in split:
-                s["cls"] = [name_to_idx[n] for n in s["cls_name"]]
-
-        return {
-            "path": data_root,
-            "train": train_samples,
-            "val": val_samples,
-            "test": test_samples,
-            "names": {i: n for i, n in enumerate(names)},
-            "nc": len(names),
-            "channels": 3,
-            "kpt_shape": [1, 3],
-        }
+        return build_hrnet_pose_data_dict(data_root)
 
     def build_dataset(self, img_path, mode: str = "train", batch: int | None = None):
         samples = self.data[mode]

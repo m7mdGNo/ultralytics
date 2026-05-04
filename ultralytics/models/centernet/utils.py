@@ -7,6 +7,16 @@ import torch.nn.functional as F
 import torchvision
 
 
+def centernet_output_stride(stride: torch.Tensor | int | float | list | tuple) -> float:
+    """Normalize ``model.stride`` to a float for heatmap decode (``Tensor`` from nn.Module; ``int`` from ``AutoBackend``)."""
+    if isinstance(stride, torch.Tensor):
+        return float(stride.flatten()[0].item())
+    if isinstance(stride, (list, tuple)) and len(stride) > 0:
+        x = stride[0]
+        return float(x.flatten()[0].item()) if isinstance(x, torch.Tensor) else float(x)
+    return float(stride)
+
+
 def decode_centernet_outputs(
     hm: torch.Tensor,
     reg: torch.Tensor,

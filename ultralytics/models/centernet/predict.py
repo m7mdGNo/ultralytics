@@ -6,7 +6,7 @@ from ultralytics.models.yolo.detect import DetectionPredictor
 from ultralytics.utils import ops
 from ultralytics.utils.torch_utils import unwrap_model
 
-from .utils import decode_centernet_outputs
+from .utils import centernet_output_stride, decode_centernet_outputs
 
 
 class CenterNetPredictor(DetectionPredictor):
@@ -16,7 +16,7 @@ class CenterNetPredictor(DetectionPredictor):
         """Decode CenterNet tuple outputs, then build ``Results`` like the detection predictor."""
         if isinstance(preds, (list, tuple)) and len(preds) == 3:
             hm, reg, wh = preds
-            stride = float(unwrap_model(self.model).stride.view(-1)[0].item())
+            stride = centernet_output_stride(unwrap_model(self.model).stride)
             preds_list = decode_centernet_outputs(
                 hm,
                 reg,

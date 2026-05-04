@@ -9,7 +9,7 @@ import torch
 from ultralytics.models.yolo.detect import DetectionValidator
 from ultralytics.utils.torch_utils import unwrap_model
 
-from .utils import decode_centernet_outputs
+from .utils import centernet_output_stride, decode_centernet_outputs
 
 
 class CenterNetValidator(DetectionValidator):
@@ -19,7 +19,7 @@ class CenterNetValidator(DetectionValidator):
         """Track output stride for heatmap decoding."""
         super().init_metrics(model)
         m = unwrap_model(model)
-        self._cn_stride = float(m.stride.view(-1)[0].item())
+        self._cn_stride = centernet_output_stride(m.stride)
 
     def postprocess(self, preds: torch.Tensor | tuple[torch.Tensor, ...]) -> list[dict[str, torch.Tensor]]:
         """Decode CenterNet tuple outputs to the same dict structure as :class:`DetectionValidator`."""

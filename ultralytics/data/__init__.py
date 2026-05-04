@@ -2,7 +2,6 @@
 
 from .base import BaseDataset
 from .build import build_dataloader, build_grounding, build_yolo_dataset, load_inference_source
-from .hrnet_pose import HRNetPoseDataset, build_hrnet_pose_data_dict, resolve_hrnet_validation_split
 from .dataset import (
     ClassificationDataset,
     GroundingDataset,
@@ -24,7 +23,4 @@ __all__ = (
     "build_grounding",
     "build_yolo_dataset",
     "load_inference_source",
-    "HRNetPoseDataset",
-    "build_hrnet_pose_data_dict",
-    "resolve_hrnet_validation_split",
 )

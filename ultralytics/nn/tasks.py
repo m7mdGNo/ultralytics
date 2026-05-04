@@ -1783,9 +1783,6 @@ def guess_model_task(model):
 
     def cfg2task(cfg):
         """Guess from YAML dictionary."""
-        yaml_file = str(cfg.get("yaml_file", "")).lower()
-        if "hrnet" in yaml_file or cfg.get("hrnet_pose"):
-            return "pose"
         m = cfg["head"][-1][-2].lower()  # output module name
         if m in {"classify", "classifier", "cls", "fc"}:
             return "classify"

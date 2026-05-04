@@ -962,10 +962,6 @@ def entrypoint(debug: str = "") -> None:
         from ultralytics import RTDETR
 
         model = RTDETR(model)  # no task argument
-    elif "hrnet" in stem:
-        from ultralytics import HRNetPose
-
-        model = HRNetPose(model, task=task)
     elif "fastsam" in stem:
         from ultralytics import FastSAM
 

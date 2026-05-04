@@ -1310,7 +1310,16 @@ class CenterNetLoss(nn.Module):
             xi = int(min(max(cx_pix / stride, 0.0), Wt - 1))
             yi = int(min(max(cy_pix / stride, 0.0), Ht - 1))
 
-            hm_target[b, c, yi, xi] = 1.0
+            # Soft Gaussian peak (Objects as Points): wider targets align better with 3×3 max-pool decode.
+            rad = int(min(5, max(1, round(((w_pix * h_pix) ** 0.5) / stride / 6))))
+            sigma = max(rad / 3.0, 0.5)
+            yy0, yy1 = max(0, yi - rad), min(Ht, yi + rad + 1)
+            xx0, xx1 = max(0, xi - rad), min(Wt, xi + rad + 1)
+            gy = torch.arange(yy0, yy1, device=device, dtype=torch.float32).unsqueeze(1)
+            gx = torch.arange(xx0, xx1, device=device, dtype=torch.float32).unsqueeze(0)
+            g = torch.exp(-(((gy - yi) ** 2 + (gx - xi) ** 2) / (2 * sigma * sigma))).to(hm_target.dtype)
+            sl = hm_target[b, c, yy0:yy1, xx0:xx1]
+            hm_target[b, c, yy0:yy1, xx0:xx1] = torch.maximum(sl, g)
             reg_target[b, 0, yi, xi] = cx_pix / stride - xi
             reg_target[b, 1, yi, xi] = cy_pix / stride - yi
             wh_target[b, 0, yi, xi] = math.log(w_pix)

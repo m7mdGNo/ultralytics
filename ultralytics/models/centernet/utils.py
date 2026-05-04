@@ -48,7 +48,10 @@ def decode_centernet_outputs(
     """
     hm_s = hm.sigmoid()
     pool = F.max_pool2d(hm_s, kernel_size=3, stride=1, padding=1)
-    peak_mask = (hm_s == pool) & (hm_s >= conf_thres)
+    # Relaxed local-max: strict equality fails under fp16/AMP when neighbors tie or differ by tiny eps,
+    # which yields empty peaks, no boxes, and mAP stuck at 0 while loss still decreases.
+    eps = 1e-2 if hm_s.dtype in (torch.float16, torch.bfloat16) else 1e-4
+    peak_mask = (hm_s >= pool - eps) & (hm_s >= conf_thres)
     masked = hm_s * peak_mask.to(dtype=hm_s.dtype)
 
     B, nc, H, W = masked.shape
